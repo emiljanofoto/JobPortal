@@ -1,62 +1,206 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col>
-        <div class="d-flex justify-space-between align-center mb-6">
-          <h1>Admin Dashboard</h1>
-          <div>
-            <v-btn color="primary" class="mr-2" @click="openJobDialog()">
-              <v-icon left>mdi-plus</v-icon>
-              New Job
-            </v-btn>
-            <v-btn color="error" @click="handleLogout">
-              <v-icon left>mdi-logout</v-icon>
-              Logout
-            </v-btn>
+  <div class="admin-container">
+    <!-- Header Section -->
+    <section class="admin-header">
+      <v-container class="px-4">
+        <div class="header-content py-6">
+          <div class="header-main mb-4">
+            <div class="header-info">
+              <h1 class="admin-title">Admin Dashboard</h1>
+              <p class="admin-subtitle">Manage job postings and track applications</p>
+            </div>
+            <div class="header-actions">
+              <v-btn
+                color="primary"
+                size="large"
+                rounded="lg"
+                class="mr-3"
+                @click="openJobDialog()"
+              >
+                <v-icon start>mdi-plus</v-icon>
+                New Job
+              </v-btn>
+              <v-btn
+                color="error"
+                variant="outlined"
+                size="large"
+                rounded="lg"
+                @click="handleLogout"
+              >
+                <v-icon start>mdi-logout</v-icon>
+                Logout
+              </v-btn>
+            </div>
           </div>
-        </div>
 
-        <v-progress-linear v-if="loading" indeterminate />
+          <!-- Stats Cards -->
+          <v-row class="stats-row">
+            <v-col cols="12" sm="6" md="3">
+              <v-card class="stats-card" rounded="xl" elevation="4">
+                <v-card-text class="text-center">
+                  <v-avatar size="60" color="primary" variant="tonal" class="mb-3">
+                    <v-icon size="30">mdi-briefcase</v-icon>
+                  </v-avatar>
+                  <div class="stats-number">{{ jobs.length }}</div>
+                  <div class="stats-label">Total Jobs</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-card class="stats-card" rounded="xl" elevation="4">
+                <v-card-text class="text-center">
+                  <v-avatar size="60" color="success" variant="tonal" class="mb-3">
+                    <v-icon size="30">mdi-check-circle</v-icon>
+                  </v-avatar>
+                  <div class="stats-number">{{ activeJobsCount }}</div>
+                  <div class="stats-label">Active Jobs</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-card class="stats-card" rounded="xl" elevation="4">
+                <v-card-text class="text-center">
+                  <v-avatar size="60" color="orange" variant="tonal" class="mb-3">
+                    <v-icon size="30">mdi-account-group</v-icon>
+                  </v-avatar>
+                  <div class="stats-number">{{ totalApplicationsCount }}</div>
+                  <div class="stats-label">Applications</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-card class="stats-card" rounded="xl" elevation="4">
+                <v-card-text class="text-center">
+                  <v-avatar size="60" color="info" variant="tonal" class="mb-3">
+                    <v-icon size="30">mdi-trending-up</v-icon>
+                  </v-avatar>
+                  <div class="stats-number">{{ Math.round(totalApplicationsCount / (jobs.length || 1)) }}</div>
+                  <div class="stats-label">Avg Applications</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </div>
+      </v-container>
+    </section>
+
+    <!-- Jobs Table Section -->
+    <v-container class="jobs-table-section px-4">
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-section">
+        <div class="text-center py-12">
+          <v-progress-circular
+            size="64"
+            width="4"
+            color="primary"
+            indeterminate
+          />
+          <p class="mt-4 text-h6">Loading dashboard data...</p>
+        </div>
+      </div>
+
+      <!-- Jobs Table -->
+      <v-card v-else class="jobs-table-card" rounded="xl" elevation="8">
+        <v-card-title class="table-header">
+          <h2 class="table-title">Job Postings</h2>
+          <v-spacer />
+          <v-btn
+            color="primary"
+            variant="outlined"
+            prepend-icon="mdi-refresh"
+            @click="jobsStore.fetchJobsWithApplications()"
+          >
+            Refresh
+          </v-btn>
+        </v-card-title>
 
         <v-data-table
-          v-else
           :headers="headers"
           :items="jobs"
           :sort-by="[{ key: 'createdAt', order: 'desc' }]"
+          class="enhanced-table"
         >
+          <template v-slot:item.title="{ item }">
+            <div class="job-title-cell">
+              <div class="job-title">{{ item.title }}</div>
+              <div class="job-location">
+                <v-icon size="14" class="mr-1">mdi-map-marker</v-icon>
+                {{ item.location }}
+              </div>
+            </div>
+          </template>
+
           <template v-slot:item.expirationDate="{ item }">
-            {{ formatDate(item.expirationDate) }}
+            <v-chip
+              :color="isJobExpiringSoon(item.expirationDate) ? 'orange' : new Date(item.expirationDate) > new Date() ? 'success' : 'error'"
+              size="small"
+              variant="tonal"
+            >
+              <v-icon start size="14">
+                {{ new Date(item.expirationDate) > new Date() ? 'mdi-clock-outline' : 'mdi-clock-alert' }}
+              </v-icon>
+              {{ formatDate(item.expirationDate) }}
+            </v-chip>
           </template>
           
           <template v-slot:item.applicationsCount="{ item }">
-            <v-chip color="primary" size="small">
-              {{ item.applications?.length || 0 }} applications
+            <v-chip 
+              :color="getApplicationCountColor(item.applications?.length || 0)"
+              size="small"
+              variant="elevated"
+            >
+              <v-icon start size="14">mdi-account-group</v-icon>
+              {{ item.applications?.length || 0 }}
             </v-chip>
           </template>
 
           <template v-slot:item.actions="{ item }">
-            <v-btn
-              icon="mdi-eye"
-              size="small"
-              @click="viewApplications(item)"
-              class="mr-2"
-            />
-            <v-btn
-              icon="mdi-pencil"
-              size="small"
-              @click="editJob(item)"
-              class="mr-2"
-            />
-            <v-btn
-              icon="mdi-delete"
-              size="small"
-              color="error"
-              @click="confirmDeleteJob(item)"
-            />
+            <div class="action-buttons">
+              <v-tooltip text="View Applications">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-eye"
+                    size="small"
+                    color="info"
+                    variant="tonal"
+                    @click="viewApplications(item)"
+                    class="mr-1"
+                  />
+                </template>
+              </v-tooltip>
+              
+              <v-tooltip text="Edit Job">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-pencil"
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    @click="editJob(item)"
+                    class="mr-1"
+                  />
+                </template>
+              </v-tooltip>
+              
+              <v-tooltip text="Delete Job">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-delete"
+                    size="small"
+                    color="error"
+                    variant="tonal"
+                    @click="confirmDeleteJob(item)"
+                  />
+                </template>
+              </v-tooltip>
+            </div>
           </template>
         </v-data-table>
-      </v-col>
-    </v-row>
+      </v-card>
+    </v-container>
 
     <!-- Job Dialog (Create/Edit) -->
     <v-dialog v-model="jobDialog" max-width="800px">
@@ -164,11 +308,11 @@
     >
       {{ snackbarMessage }}
     </v-snackbar>
-  </v-container>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useJobsStore, type Job } from '../stores/jobs'
@@ -180,11 +324,10 @@ const jobsStore = useJobsStore()
 const { jobs, loading } = jobsStore
 
 const headers = [
-  { title: 'Title', key: 'title', sortable: true },
-  { title: 'Location', key: 'location', sortable: true },
-  { title: 'Expiration Date', key: 'expirationDate', sortable: true },
-  { title: 'Applications', key: 'applicationsCount', sortable: false },
-  { title: 'Actions', key: 'actions', sortable: false }
+  { title: 'Job Details', key: 'title', sortable: true, width: '30%' },
+  { title: 'Status', key: 'expirationDate', sortable: true, width: '20%' },
+  { title: 'Applications', key: 'applicationsCount', sortable: false, width: '15%' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '15%', align: 'center' }
 ]
 
 const applicationHeaders = [
@@ -232,6 +375,14 @@ const dateRules = [
   (v: string) => new Date(v) > new Date() || 'Expiration date must be in the future'
 ]
 
+const activeJobsCount = computed(() => {
+  return jobs.value.filter(job => new Date(job.expirationDate) > new Date()).length
+})
+
+const totalApplicationsCount = computed(() => {
+  return jobs.value.reduce((total, job) => total + (job.applications?.length || 0), 0)
+})
+
 onMounted(() => {
   jobsStore.fetchJobsWithApplications()
 })
@@ -242,6 +393,21 @@ function formatDate(dateString: string) {
 
 function formatDateTime(dateString: string) {
   return new Date(dateString).toLocaleString()
+}
+
+function isJobExpiringSoon(dateString: string) {
+  const expiryDate = new Date(dateString)
+  const now = new Date()
+  const diffTime = expiryDate.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays <= 7 && diffDays > 0
+}
+
+function getApplicationCountColor(count: number) {
+  if (count === 0) return 'grey'
+  if (count <= 2) return 'orange'
+  if (count <= 5) return 'primary'
+  return 'success'
 }
 
 function openJobDialog(job?: Job) {
@@ -340,3 +506,166 @@ function handleLogout() {
   router.push('/login')
 }
 </script>
+
+<style scoped>
+.admin-container {
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.admin-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-title {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.admin-subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+.header-actions .v-btn {
+  font-weight: 600;
+}
+
+.header-actions .v-btn--variant-outlined {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
+}
+
+.header-actions .v-btn--variant-outlined:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stats-row {
+  margin-top: 2rem;
+}
+
+.stats-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.stats-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+.stats-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2c3e50;
+  line-height: 1;
+}
+
+.stats-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.jobs-table-section {
+  padding: 2rem 0 4rem;
+}
+
+.jobs-table-card {
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.table-header {
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.table-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.enhanced-table {
+  background: transparent;
+}
+
+:deep(.enhanced-table .v-data-table__td) {
+  padding: 16px !important;
+  vertical-align: middle;
+}
+
+:deep(.enhanced-table .v-data-table__th) {
+  font-weight: 600 !important;
+  color: #2c3e50 !important;
+  padding: 16px !important;
+}
+
+.job-title-cell .job-title {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.25rem;
+}
+
+.job-title-cell .job-location {
+  font-size: 0.85rem;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.loading-section {
+  min-height: 50vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 960px) {
+  .header-main {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  
+  .stats-number {
+    font-size: 2rem;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .table-header {
+    padding: 1rem;
+  }
+  
+  .table-title {
+    font-size: 1.25rem;
+  }
+  
+  :deep(.enhanced-table .v-data-table__td),
+  :deep(.enhanced-table .v-data-table__th) {
+    padding: 8px !important;
+  }
+}
+</style>

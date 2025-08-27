@@ -12,6 +12,23 @@ export interface User {
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const token = ref<string | null>(localStorage.getItem('token'))
+  
+  const initializeAuth = () => {
+    const storedToken = localStorage.getItem('token')
+    const storedUser = localStorage.getItem('user')
+    
+    if (storedToken && storedUser) {
+      try {
+        token.value = storedToken
+        user.value = JSON.parse(storedUser)
+      } catch (error) {
+        console.error('Error parsing stored user:', error)
+        clearAuth()
+      }
+    }
+  }
+  
+  initializeAuth()
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
@@ -21,12 +38,14 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = userData
     token.value = authToken
     localStorage.setItem('token', authToken)
+    localStorage.setItem('user', JSON.stringify(userData))
   }
 
   function clearAuth() {
     user.value = null
     token.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
   }
 
   async function login(email: string, password: string) {
